@@ -7,16 +7,17 @@ class Jetpack_XMLRPC_Server {
 	/**
 	 * The current error object
 	 */
-	var $error = null;
+	public $error = null;
 
 	/**
-	 * Whitelist of the XML-RPC methods available to the Jetpack Server. If the 
+	 * Whitelist of the XML-RPC methods available to the Jetpack Server. If the
 	 * user is not authenticated (->login()) then the methods are never added,
 	 * so they will get a "does not exist" error.
 	 */
 	function xmlrpc_methods( $core_methods ) {
 		$jetpack_methods = array(
-			'jetpack.jsonAPI' => array( $this, 'json_api' ),
+			'jetpack.jsonAPI'      => array( $this, 'json_api' ),
+			'jetpack.verifyAction' => array( $this, 'verify_action' ),
 		);
 
 		$user = $this->login();
@@ -29,17 +30,38 @@ class Jetpack_XMLRPC_Server {
 				'jetpack.featuresEnabled'   => array( $this, 'features_enabled' ),
 				'jetpack.getPost'           => array( $this, 'get_post' ),
 				'jetpack.getPosts'          => array( $this, 'get_posts' ),
-				'jetpack.getComment'        => array( $this, 'get_comment' ),  
+				'jetpack.getComment'        => array( $this, 'get_comment' ),
 				'jetpack.getComments'       => array( $this, 'get_comments' ),
+				'jetpack.disconnectBlog'    => array( $this, 'disconnect_blog' ),
+				'jetpack.unlinkUser'        => array( $this, 'unlink_user' ),
 			) );
 
 			if ( isset( $core_methods['metaWeblog.editPost'] ) ) {
 				$jetpack_methods['metaWeblog.newMediaObject'] = $core_methods['metaWeblog.newMediaObject'];
 				$jetpack_methods['jetpack.updateAttachmentParent'] = array( $this, 'update_attachment_parent' );
 			}
+
+			/**
+			 * Filters the XML-RPC methods available to Jetpack for authenticated users.
+			 *
+			 * @since 1.1.0
+			 *
+			 * @param array $jetpack_methods XML-RPC methods available to the Jetpack Server.
+			 * @param array $core_methods Available core XML-RPC methods.
+			 * @param WP_User $user Information about a given WordPress user.
+			 */
+			$jetpack_methods = apply_filters( 'jetpack_xmlrpc_methods', $jetpack_methods, $core_methods, $user );
 		}
 
-		return apply_filters( 'jetpack_xmlrpc_methods', $jetpack_methods, $core_methods, $user );
+		/**
+		 * Filters the XML-RPC methods available to Jetpack for unauthenticated users.
+		 *
+		 * @since 3.0.0
+		 *
+		 * @param array $jetpack_methods XML-RPC methods available to the Jetpack Server.
+		 * @param array $core_methods Available core XML-RPC methods.
+		 */
+		return apply_filters( 'jetpack_xmlrpc_unauthenticated_methods', $jetpack_methods, $core_methods );
 	}
 
 	/**
@@ -52,8 +74,13 @@ class Jetpack_XMLRPC_Server {
 	}
 
 	/**
-	 * Verifies that Jetpack.WordPress.com received a registration request from this site
-	 *
+	* Verifies that Jetpack.WordPress.com received a registration request from this site
+	*/
+	function verify_registration( $verify_secret ) {
+		return $this->verify_action( array( 'register', $verify_secret ) );
+	}
+
+	/**
 	 * @return WP_Error|string secret_2 on success, WP_Error( error_code => error_code, error_message => error description, error_data => status code ) on failure
 	 *
 	 * Possible error_codes:
@@ -63,31 +90,34 @@ class Jetpack_XMLRPC_Server {
 	 * verify_secrets_missing: No longer have verification secrets stored
 	 * verify_secrets_mismatch: stored secret_1 does not match secret_1 sent by Jetpack.WordPress.com
 	 */
-	function verify_registration( $verify_secret ) {
+	function verify_action( $params ) {
+		$action = $params[0];
+		$verify_secret = $params[1];
+
 		if ( empty( $verify_secret ) ) {
 			return $this->error( new Jetpack_Error( 'verify_secret_1_missing', sprintf( 'The required "%s" parameter is missing.', 'secret_1' ), 400 ) );
 		} else if ( !is_string( $verify_secret ) ) {
 			return $this->error( new Jetpack_Error( 'verify_secret_1_malformed', sprintf( 'The required "%s" parameter is malformed.', 'secret_1' ), 400 ) );
 		}
 
-		$secrets = Jetpack::get_option( 'register' );
+		$secrets = Jetpack_Options::get_option( $action );
 		if ( !$secrets || is_wp_error( $secrets ) ) {
-			Jetpack::delete_option( 'register' );
+			Jetpack_Options::delete_option( $action );
 			return $this->error( new Jetpack_Error( 'verify_secrets_missing', 'Verification took too long', 400 ) );
 		}
 
 		@list( $secret_1, $secret_2, $secret_eol ) = explode( ':', $secrets );
 		if ( empty( $secret_1 ) || empty( $secret_2 ) || empty( $secret_eol ) || $secret_eol < time() ) {
-			Jetpack::delete_option( 'register' );
+			Jetpack_Options::delete_option( $action );
 			return $this->error( new Jetpack_Error( 'verify_secrets_missing', 'Verification took too long', 400 ) );
 		}
 
 		if ( $verify_secret !== $secret_1 ) {
-			Jetpack::delete_option( 'register' );
+			Jetpack_Options::delete_option( $action );
 			return $this->error( new Jetpack_Error( 'verify_secrets_mismatch', 'Secret mismatch', 400 ) );
 		}
 
-		Jetpack::delete_option( 'register' );
+		Jetpack_Options::delete_option( $action );
 
 		return $secret_2;
 	}
@@ -98,6 +128,7 @@ class Jetpack_XMLRPC_Server {
 	 * @return WP_User|IXR_Error
 	 */
 	function login() {
+		Jetpack::init()->require_jetpack_authentication();
 		$user = wp_authenticate( 'username', 'password' );
 		if ( is_wp_error( $user ) ) {
 			if ( 'authentication_failed' == $user->get_error_code() ) { // Generic error could mean most anything.
@@ -148,7 +179,7 @@ class Jetpack_XMLRPC_Server {
 	function test_connection() {
 		return JETPACK__VERSION;
 	}
-	
+
 	function test_api_user_code( $args ) {
 		$client_id = (int) $args[0];
 		$user_id   = (int) $args[1];
@@ -171,7 +202,7 @@ class Jetpack_XMLRPC_Server {
 		error_log( "VERIFY: $verify" );
 		*/
 
-		$jetpack_token = Jetpack_Data::get_access_token( 1 );
+		$jetpack_token = Jetpack_Data::get_access_token( JETPACK_MASTER_USER );
 
 		$api_user_code = get_user_meta( $user_id, "jetpack_json_api_$client_id", true );
 		if ( !$api_user_code ) {
@@ -190,6 +221,27 @@ class Jetpack_XMLRPC_Server {
 		}
 
 		return $user_id;
+	}
+
+	/**
+	* Disconnect this blog from the connected wordpress.com account
+	* @return boolean
+	*/
+	function disconnect_blog() {
+		Jetpack::log( 'disconnect' );
+		Jetpack::disconnect();
+
+		return true;
+	}
+
+	/**
+	 * Unlink a user from WordPress.com
+	 *
+	 * This will fail if called by the Master User.
+	 */
+	function unlink_user() {
+		Jetpack::log( 'unlink' );
+		return Jetpack::unlink_user();
 	}
 
 	/**
@@ -221,7 +273,7 @@ class Jetpack_XMLRPC_Server {
 
 		return $modules;
 	}
-	
+
 	function get_post( $id ) {
 		if ( !$id = (int) $id ) {
 			return false;
@@ -232,7 +284,7 @@ class Jetpack_XMLRPC_Server {
 		$post = $jetpack->sync->get_post( $id );
 		return $post;
 	}
-	
+
 	function get_posts( $args ) {
 		list( $post_ids ) = $args;
 		$post_ids = array_map( 'intval', (array) $post_ids );
@@ -269,7 +321,7 @@ class Jetpack_XMLRPC_Server {
 
 		return $sync_data;
 	}
-	
+
 	function update_attachment_parent( $args ) {
 		$attachment_id = (int) $args[0];
 		$parent_id     = (int) $args[1];
@@ -287,8 +339,8 @@ class Jetpack_XMLRPC_Server {
 		$method       = (string) $json_api_args[0];
 		$url          = (string) $json_api_args[1];
 		$post_body    = is_null( $json_api_args[2] ) ? null : (string) $json_api_args[2];
-		$my_id        = (int) $json_api_args[3];
 		$user_details = (array) $json_api_args[4];
+		$locale       = (string) $json_api_args[5];
 
 		if ( !$verify_api_user_args ) {
 			$user_id = 0;
@@ -312,11 +364,31 @@ class Jetpack_XMLRPC_Server {
 		error_log( "METHOD: $method" );
 		error_log( "URL: $url" );
 		error_log( "POST BODY: $post_body" );
-		error_log( "MY JETPACK ID: $my_id" );
 		error_log( "VERIFY_ARGS: " . print_r( $verify_api_user_args, 1 ) );
 		error_log( "VERIFIED USER_ID: " . (int) $user_id );
 		error_log( "-- end json api via jetpack debugging -- " );
 		*/
+
+		if ( 'en' !== $locale ) {
+			// .org mo files are named slightly different from .com, and all we have is this the locale -- try to guess them.
+			$new_locale = $locale;
+			if ( strpos( $locale, '-' ) !== false ) {
+				$pieces = explode( '-', $locale );
+				$new_locale = $locale_pieces[0];
+				$new_locale .= ( ! empty( $locale_pieces[1] ) ) ? '_' . strtoupper( $locale_pieces[1] ) : '';
+			} else {
+				// .com might pass 'fr' because thats what our language files are named as, where core seems
+				// to do fr_FR - so try that if we don't think we can load the file.
+				if ( ! file_exists( WP_LANG_DIR . '/' . $locale . '.mo' ) ) {
+					$new_locale =  $locale . '_' . strtoupper( $locale );
+				}
+			}
+
+			if ( file_exists( WP_LANG_DIR . '/' . $new_locale . '.mo' ) ) {
+				unload_textdomain( 'default' );
+				load_textdomain( 'default', WP_LANG_DIR . '/' . $new_locale . '.mo' );
+			}
+		}
 
 		$old_user = wp_get_current_user();
 		wp_set_current_user( $user_id );
@@ -332,10 +404,10 @@ class Jetpack_XMLRPC_Server {
 		// needed?
 		require_once ABSPATH . 'wp-admin/includes/admin.php';
 
-		require_once dirname( __FILE__ ) . '/class.json-api.php';
+		require_once JETPACK__PLUGIN_DIR . 'class.json-api.php';
 		$api = WPCOM_JSON_API::init( $method, $url, $post_body );
 		$api->token_details['user'] = $user_details;
-		require_once dirname( __FILE__ ) . '/class.json-api-endpoints.php';
+		require_once JETPACK__PLUGIN_DIR . 'class.json-api-endpoints.php';
 
 		$display_errors = ini_set( 'display_errors', 0 );
 		ob_start();

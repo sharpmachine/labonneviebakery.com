@@ -1,5 +1,13 @@
 <?php
 
+    
+    /**
+    * Return the user level
+    * 
+    * This is deprecated, will be removed in the next versions
+    * 
+    * @param mixed $return_as_numeric
+    */
     function userdata_get_user_level($return_as_numeric = FALSE)
         {
             global $userdata;
@@ -18,6 +26,24 @@
             return ($user_level);
         }
         
+    
+    function cpt_get_options()
+        {
+            //make sure the vars are set as default
+            $options = get_option('cpto_options');
+            
+            $defaults   = array (
+                                    'show_reorder_interfaces'   =>  array(),
+                                    'autosort'                  =>  1,
+                                    'adminsort'                 =>  1,
+                                    'capability'                =>  'install_plugins',
+                                    'navigation_sort_apply'     =>  1,
+                                    
+                                );
+            $options          = wp_parse_args( $options, $defaults );
+            
+            return $options;            
+        }
         
     function cpt_info_box()
         {
@@ -34,11 +60,11 @@
                                 <div class="g-plusone" data-size="small" data-annotation="none" data-href="http://nsp-code.com/"></div>
                             </div>
                             <div class="p_s_item s_t">
-                                <a href="https://twitter.com/share" class="twitter-share-button" data-url="http://www.nsp-code.com" data-text="Define custom order for your taxonomies terms through an easy to use javascript AJAX drag and drop interface. No theme code updates are necessarily, this plugin will take care of query update." data-count="none">Tweet</a><script type="text/javascript" src="//platform.twitter.com/widgets.js"></script>
+                                <a href="https://twitter.com/share" class="twitter-share-button" data-url="http://www.nsp-code.com" data-text="Define custom order for your post types through an easy to use javascript AJAX drag and drop interface. No theme code updates are necessarily, this plugin will take care of query update." data-count="none">Tweet</a><script type="text/javascript" src="//platform.twitter.com/widgets.js"></script>
                             </div> 
                             
                             <div class="p_s_item s_f">
-                                <iframe src="//www.facebook.com/plugins/like.php?href=http%3A%2F%2Fwww.nsp-code.com%2F&amp;send=false&amp;layout=button_count&amp;width=75&amp;show_faces=false&amp;action=like&amp;colorscheme=light&amp;font=arial&amp;height=21" scrolling="no" frameborder="0" style="border:none; overflow:hidden; width:75px; height:21px;" allowTransparency="true"></iframe>
+                                <iframe src="//www.facebook.com/plugins/like.php?href=http%3A%2F%2Fwww.nsp-code.com%2F&amp;send=false&amp;layout=button_count&amp;width=82&amp;show_faces=false&amp;action=like&amp;colorscheme=light&amp;font=arial&amp;height=21" scrolling="no" frameborder="0" style="border:none; overflow:hidden; width:82px; height:21px;" allowTransparency="true"></iframe>
                             </div>
                             
                             <div class="clear"></div>
@@ -54,9 +80,11 @@
                         </div>
                     </div>
                     
-                    <p>Did you found useful this plug-in? Please support our work with a donation or write an article about this plugin in your blog with a link to our site <strong>http://www.nsp-code.com/</strong>.</p>
-                    <h4>Did you know there is available an Advanced version of this plug-in? <a target="_blank" href="http://www.nsp-code.com/premium-plugins/wordpress-plugins/advanced-post-types-order/">Read more</a></h4>
-                    <p>Check our <a target="_blank" href="http://wordpress.org/extend/plugins/taxonomy-terms-order/">Category Order - Taxonomy Terms Order</a> plugin which allow to custom sort all categories and custom taxonomies terms </p>
+                    <p><?php _e('Did you find this plugin useful? Please support our work with a donation or write an article about this plugin in your blog with a link to our site', 'post-types-order') ?> <a href="http://www.nsp-code.com/" target="_blank"><strong>http://www.nsp-code.com/</strong></a>.</p>
+                    <h4><?php _e('Did you know there is available an Advanced version of this plug-in?', 'post-types-order') ?> <a target="_blank" href="http://www.nsp-code.com/premium-plugins/wordpress-plugins/advanced-post-types-order/"><?php _e('Read more', 'post-types-order') ?></a></h4>
+                    <p><?php _e('Check our', 'post-types-order') ?> <a target="_blank" href="http://wordpress.org/plugins/taxonomy-terms-order/">Category Order - Taxonomy Terms Order</a> <?php _e('plugin which allow to custom sort categories and custom taxonomies terms', 'post-types-order') ?> </p>
+                    
+                    <div class="clear"></div>
                 </div>
             
             <?php   
